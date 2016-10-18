@@ -31,15 +31,7 @@ case $key in
 esac
 done
 
-logged_in=$(conjur authn whoami 2>/dev/null || true)
-if [[ !($logged_in =~ account) && "$DOCKER_ARGUMENTS" == "-d" ]] ; then
-  echo "Not logged in to Conjur, switching to interactive mode"
-  DOCKER_ARGUMENTS="-it"
-fi
-
 docker build -t conjur-registry-proxy .
-
-cert_file=$(grep cert_file ~/.conjurrc | awk '{print $2}' | tr -d '"')
 
 PROXY_DOCKER_ID=$(docker ps -a -f name=conjur-registry-proxy -q)
 if [[ $PROXY_DOCKER_ID ]] ; then
@@ -50,6 +42,16 @@ fi
 # Ensure .netrc exists so docker doesn't create it as a directory
 [[ ! -f ~/.netrc ]] && touch ~/.netrc
 
+function whoami() {
+  docker run --rm -v ~/.netrc:/root/.netrc --entrypoint conjur conjur-registry-proxy authn whoami
+}
+
+logged_in=$(whoami 2>/dev/null || true)
+if [[ !($logged_in =~ account) && "$DOCKER_ARGUMENTS" == "-d" ]] ; then
+  echo "Not logged in to Conjur, switching to interactive mode"
+  DOCKER_ARGUMENTS="-it"
+fi
+
 docker run $DOCKER_ARGUMENTS --net=host \
     -v ~/.netrc:/root/.netrc \
     --name conjur-registry-proxy conjur-registry-proxy
@@ -57,4 +59,5 @@ docker run $DOCKER_ARGUMENTS --net=host \
 if [[ $DOCKER_ARGUMENTS = "-d" ]] ; then
   echo ""
   echo "Your Docker proxy is ready to be used!"
+  echo "You can stop it with the command: docker rm -f conjur-registry-proxy"
 fi
